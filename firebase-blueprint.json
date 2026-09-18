@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "CreatorProfile": {
+      "title": "CreatorProfile",
+      "description": "Public profile, biography, social media links, avatar, and earnings metadata for independent marketplace creators.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the creator" },
+        "name": { "type": "string", "description": "Creator display name" },
+        "username": { "type": "string", "description": "Unique creator username handle" },
+        "avatar": { "type": "string", "description": "Public image URL for creator profile photo" },
+        "bio": { "type": "string", "description": "Artist biography, artistic philosophy, and background" },
+        "location": { "type": "string", "description": "Creator city and country" },
+        "joinedDate": { "type": "string", "description": "Date the creator joined the marketplace" },
+        "totalSales": { "type": "number", "description": "Total merchandise items sold" },
+        "totalEarnings": { "type": "number", "description": "Accumulated royalties earned in USD" },
+        "availableBalance": { "type": "number", "description": "Withdrawable royalty balance in USD" },
+        "followerCount": { "type": "number", "description": "Number of marketplace community followers" },
+        "verified": { "type": "boolean", "description": "Verified artist badge status" },
+        "socialLinks": {
+          "type": "object",
+          "description": "Public social media handles and website URLs",
+          "properties": {
+            "instagram": { "type": "string" },
+            "twitter": { "type": "string" },
+            "website": { "type": "string" },
+            "youtube": { "type": "string" },
+            "tiktok": { "type": "string" },
+            "behance": { "type": "string" }
+          }
+        },
+        "bankDetails": {
+          "type": "object",
+          "description": "Creator bank account details for direct deposit payouts",
+          "properties": {
+            "bankName": { "type": "string" },
+            "accountHolderName": { "type": "string" },
+            "accountNumber": { "type": "string" },
+            "routingNumber": { "type": "string" },
+            "swiftCode": { "type": "string" },
+            "accountType": { "type": "string" },
+            "country": { "type": "string" },
+            "lastUpdated": { "type": "string" }
+          }
+        }
+      },
+      "required": ["id", "name", "username", "avatar", "bio"]
+    },
+    "Artwork": {
+      "title": "Artwork",
+      "description": "Original artwork design assets and merchandise print settings uploaded by creators.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "creatorAvatar": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "basePrice": { "type": "number" },
+        "creatorMarginPercent": { "type": "number" }
+      },
+      "required": ["id", "title", "creatorId", "imageUrl"]
+    }
+  },
+  "firestore": {
+    "/creators/{creatorId}": {
+      "schema": "CreatorProfile",
+      "description": "Stores independent artist profiles, bios, social links, and royalty balances."
+    },
+    "/artworks/{artworkId}": {
+      "schema": "Artwork",
+      "description": "Stores marketplace designs, print setups, and product catalogs."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "MX Gallery",
+  "description": "Custom artwork marketplace and creator studio, featuring seamless artwork uploads, multi-product previews, real-time creator earnings dashboard, and secure checkout.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

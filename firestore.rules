@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Health check test connection
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // Public read for marketplace artworks, creators, and reviews
+    match /artworks/{artworkId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /creators/{creatorId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /orders/{orderId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}
