@@ -34,6 +34,14 @@ import { Artwork, CreatorProfile, Order, Review, BankDetails } from '../types';
 import { INITIAL_ARTWORKS, INITIAL_CREATOR, INITIAL_REVIEWS } from './seedData';
 import { sendOrderToSupabase } from './supabase';
 
+function extractFirebaseApiKey(val?: unknown): string {
+  if (!val) return 'AIzaSyA3qj4533RIMscz0MDnUkMqj1phZ3x0xGo';
+  const str = String(val).trim();
+  const match = str.match(/AIzaSy[A-Za-z0-9_\-]+/);
+  if (match) return match[0];
+  return cleanEnvValue(str) || 'AIzaSyA3qj4533RIMscz0MDnUkMqj1phZ3x0xGo';
+}
+
 function cleanEnvValue(val?: unknown): string {
   if (!val) return '';
   return String(val)
@@ -43,7 +51,7 @@ function cleanEnvValue(val?: unknown): string {
     .trim();
 }
 
-const cleanedApiKey = cleanEnvValue(import.meta.env.VITE_FIREBASE_API_KEY) || cleanEnvValue(firebaseConfigJson.apiKey) || "AIzaSyA3qj4533RIMscz0MDnUkMqj1phZ3x0xGo";
+const cleanedApiKey = extractFirebaseApiKey(import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey);
 const cleanedAuthDomain = cleanEnvValue(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN) || cleanEnvValue(firebaseConfigJson.authDomain) || "ageless-webbing-502620-b8.firebaseapp.com";
 const cleanedProjectId = cleanEnvValue(import.meta.env.VITE_FIREBASE_PROJECT_ID) || cleanEnvValue(firebaseConfigJson.projectId) || "ageless-webbing-502620-b8";
 const cleanedStorageBucket = cleanEnvValue(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET) || cleanEnvValue(firebaseConfigJson.storageBucket) || "ageless-webbing-502620-b8.firebasestorage.app";
@@ -453,6 +461,21 @@ export async function loginWithEmail(email: string, pass: string): Promise<AuthA
     };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
+    // If testing with demo account and user doesn't exist yet, auto-create it smoothly
+    if (email.toLowerCase().includes('demo@mxgallery.com') && (errorMsg.includes('user-not-found') || errorMsg.includes('invalid-credential') || errorMsg.includes('INVALID_LOGIN_CREDENTIALS'))) {
+      try {
+        const signupRes = await createUserWithEmailAndPassword(auth, email, pass);
+        if (signupRes.user) {
+          await updateProfile(signupRes.user, { displayName: 'Demo Artist' });
+        }
+        return {
+          success: true,
+          user: signupRes.user,
+        };
+      } catch {
+        // Continue to standard error reporting
+      }
+    }
     return {
       success: false,
       user: null,

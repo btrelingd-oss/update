@@ -188,8 +188,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {errorMessage && (
           <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 flex items-start gap-2 animate-in fade-in">
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
-            <div className="flex-1">
-              <span className="font-semibold">{errorMessage}</span>
+            <div className="flex-1 space-y-1.5">
+              <span className="font-semibold block">{errorMessage}</span>
+              {(errorMessage.includes('not authorized in Firebase') || errorMessage.includes('unauthorized-domain')) && (
+                <div className="pt-2 border-t border-rose-200 text-[11px] text-rose-800 space-y-1">
+                  <p>
+                    Domain: <code className="bg-white px-1.5 py-0.5 rounded font-mono font-bold text-rose-900">{typeof window !== 'undefined' ? window.location.hostname : 'your-domain'}</code>
+                  </p>
+                  <p>
+                    Go to <strong>Firebase Console &gt; Authentication &gt; Settings &gt; Authorized domains</strong> and add this domain.
+                  </p>
+                  <p className="text-slate-600 font-medium">
+                    ✨ Or use <strong>Email Sign In</strong> below (works immediately without domain authorization).
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -294,6 +307,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   placeholder="At least 6 characters"
                   className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-900 focus:outline-hidden focus:border-rose-500 focus:ring-2 focus:ring-rose-500/10"
                 />
+              </div>
+              <div className="flex items-center justify-between mt-1.5 px-0.5">
+                <span className="text-[10px] text-slate-400">Quick testing:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('demo@mxgallery.com');
+                    setPassword('password123');
+                    if (mode === 'signup') setName('Demo Artist');
+                  }}
+                  className="text-[10px] font-bold text-rose-600 hover:text-rose-700 underline cursor-pointer"
+                >
+                  Fill demo credentials
+                </button>
               </div>
             </div>
 
