@@ -58,8 +58,17 @@
         "creatorAvatar": { "type": "string" },
         "description": { "type": "string" },
         "imageUrl": { "type": "string" },
+        "storagePath": { "type": "string" },
         "basePrice": { "type": "number" },
-        "creatorMarginPercent": { "type": "number" }
+        "creatorMarginPercent": { "type": "number" },
+        "tags": { "type": "array" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "salesCount": { "type": "number" },
+        "viewsCount": { "type": "number" },
+        "likesCount": { "type": "number" },
+        "defaultCategory": { "type": "string" },
+        "enabledProducts": { "type": "array" }
       },
       "required": ["id", "title", "creatorId", "imageUrl"]
     }

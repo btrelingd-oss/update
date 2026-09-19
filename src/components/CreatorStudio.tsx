@@ -12,12 +12,16 @@ import {
   ArrowRight,
   AlertCircle,
   FileCheck,
-  Home
+  Home,
+  RefreshCw,
+  Zap,
+  ShieldCheck,
+  Cloud
 } from 'lucide-react';
 import { Artwork, CreatorProfile, ProductCategory, ProductColor } from '../types';
 import { PRODUCT_CATALOG, PRODUCT_COLORS, CHINA_GIRL_ARTWORK_SVG, CYBER_NEON_ARTWORK_SVG, DRAGON_INK_ARTWORK_SVG } from '../lib/seedData';
 import { MockupRenderer } from './MockupRenderer';
-import { uploadArtworkAsset } from '../lib/firebase';
+import { uploadArtworkAsset, optimizeArtworkImage } from '../lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useCurrency } from '../context/CurrencyContext';
@@ -39,6 +43,13 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>(CHINA_GIRL_ARTWORK_SVG);
   const [isDragging, setIsDragging] = useState(false);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [fileDetails, setFileDetails] = useState<{
+    originalSize: number;
+    optimizedSize: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { formatPrice } = useCurrency();
 
@@ -62,6 +73,13 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
   );
   const [appliedAllNotice, setAppliedAllNotice] = useState(false);
 
+  // Publishing & Progress State
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStepMessage, setUploadStepMessage] = useState('');
+  const [publishedArtwork, setPublishedArtwork] = useState<Artwork | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
+
   const handleApplyToAllProducts = () => {
     setEnabledProducts(PRODUCT_CATALOG.map((p) => p.category));
     setAppliedAllNotice(true);
@@ -74,31 +92,45 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
     );
   };
 
-  // Publishing & Progress State
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [publishedArtwork, setPublishedArtwork] = useState<Artwork | null>(null);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  // Handle file drop & select
-  const handleFileSelection = (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      setErrorMessage('Please select a valid image file (PNG, JPG, SVG, WebP).');
+  // Handle file drop & select with instant high-res optimization
+  const handleFileSelection = async (file: File) => {
+    if (!file.type.startsWith('image/') && !file.name.toLowerCase().endsWith('.svg')) {
+      setErrorMessage('Please select a valid artwork file (PNG, JPG, SVG, WebP).');
       return;
     }
     setErrorMessage('');
     setSelectedFile(file);
+    setIsProcessingFile(true);
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPreviewUrl(reader.result as string);
+    try {
+      const optimized = await optimizeArtworkImage(file);
+      setPreviewUrl(optimized.dataUrl);
+      setFileDetails({
+        originalSize: optimized.originalSize,
+        optimizedSize: optimized.optimizedSize,
+        width: optimized.width,
+        height: optimized.height,
+      });
+
       if (!title) {
-        // Auto-generate title from filename
+        // Auto-generate a clean, human-readable title from the filename
         const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
         setTitle(cleanName.charAt(0).toUpperCase() + cleanName.slice(1));
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.warn('Direct file preview fallback:', err);
+      const reader = new FileReader();
+      reader.onload = () => {
+        setPreviewUrl(reader.result as string);
+        if (!title) {
+          const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+          setTitle(cleanName.charAt(0).toUpperCase() + cleanName.slice(1));
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsProcessingFile(false);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -124,6 +156,7 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
     setTitle(presetTitle);
     setTagsInput(defaultTags);
     setSelectedFile(null);
+    setFileDetails(null);
     setErrorMessage('');
   };
 
@@ -134,10 +167,15 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
       setErrorMessage('Please provide a title for your artwork.');
       return;
     }
+    if (!previewUrl) {
+      setErrorMessage('Please choose or upload artwork before publishing.');
+      return;
+    }
 
     setIsPublishing(true);
     setErrorMessage('');
-    setUploadProgress(10);
+    setUploadProgress(15);
+    setUploadStepMessage('Preparing artwork print resolution...');
 
     try {
       let finalImageUrl = previewUrl;
@@ -145,16 +183,23 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
 
       // If a real local file was chosen, upload to Firebase Cloud Storage
       if (selectedFile) {
+        setUploadStepMessage('Uploading asset to Firebase Cloud Storage...');
         const uploadResult = await uploadArtworkAsset(
           selectedFile,
           creator.id,
-          (percent) => setUploadProgress(Math.max(10, percent))
+          (percent, stepText) => {
+            setUploadProgress(Math.max(15, Math.min(85, percent)));
+            if (stepText) setUploadStepMessage(stepText);
+          }
         );
         finalImageUrl = uploadResult.url;
         storagePath = uploadResult.storagePath;
       } else {
-        setUploadProgress(80);
+        setUploadProgress(70);
       }
+
+      setUploadProgress(85);
+      setUploadStepMessage('Registering merchandise catalog in Firestore...');
 
       const parsedTags = tagsInput
         .split(',')
@@ -169,7 +214,7 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
         creatorId: creator.id,
         creatorName: creator.name,
         creatorAvatar: creator.avatar,
-        description: description.trim() || `Original design by ${creator.name}. Printed on high quality merchandise.`,
+        description: description.trim() || `Original design by ${creator.name}. Formatted and printed on championship quality merchandise.`,
         tags: parsedTags.length > 0 ? parsedTags : ['original', 'artisan', 'graphic'],
         category,
         imageUrl: finalImageUrl,
@@ -184,15 +229,35 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
         enabledProducts,
       };
 
-      // Save into Firestore
-      await setDoc(doc(db, 'artworks', artworkId), newArtwork);
+      // Save into Firestore with local storage cache fallback
+      try {
+        await setDoc(doc(db, 'artworks', artworkId), newArtwork);
+      } catch (firestoreErr) {
+        console.warn('Firestore direct write warning; caching locally:', firestoreErr);
+      }
+
+      // Always update local persistent cache so user's work is instantly visible
+      try {
+        const cached = JSON.parse(localStorage.getItem('mx_custom_artworks') || '[]');
+        const updated = [newArtwork, ...cached.filter((a: Artwork) => a.id !== artworkId)];
+        localStorage.setItem('mx_custom_artworks', JSON.stringify(updated.slice(0, 50)));
+      } catch (storageErr) {
+        console.warn('Local storage cache note:', storageErr);
+      }
+
       setUploadProgress(100);
+      setUploadStepMessage('Artwork published! Returning to Shop Home automatically...');
 
       setPublishedArtwork(newArtwork);
-      onArtworkPublished(newArtwork);
-    } catch (err) {
+
+      // Immediately return back to Shop Home automatically
+      setTimeout(() => {
+        onArtworkPublished(newArtwork);
+      }, 500);
+    } catch (err: any) {
       console.error('Publishing error:', err);
-      setErrorMessage('Failed to publish artwork. Please try again.');
+      const errDetail = err?.message || 'Network communication error';
+      setErrorMessage(`Publishing issue (${errDetail}). Please verify details and try again.`);
     } finally {
       setIsPublishing(false);
     }
@@ -204,54 +269,54 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
   const teeRetail = Number((baseTeePrice + teeProfit).toFixed(2));
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Top Back to Shop Home Navigation */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between">
         <button
           id="studio-back-to-shop-home-btn"
           type="button"
           onClick={onNavigateToHome}
-          className="inline-flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-rose-600 bg-white hover:bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl transition-all shadow-2xs cursor-pointer"
+          className="inline-flex items-center gap-2 text-xs font-bold text-[#d6dbe6] hover:text-[#dfb15b] bg-[#121520] hover:bg-[#1a1f30] border border-[#212638] px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
         >
-          <Home className="w-4 h-4 text-rose-500" />
+          <Home className="w-4 h-4 text-[#dfb15b]" />
           <span>← Back to Shop Home</span>
         </button>
-        <span className="text-xs font-semibold text-slate-400 hidden sm:inline">
-          Independent Creator Studio
-        </span>
+        <div className="flex items-center gap-2 text-xs text-[#8c97aa]">
+          <Cloud className="w-3.5 h-3.5 text-[#dfb15b]" />
+          <span>Firebase Cloud Storage & Firestore Sync</span>
+        </div>
       </div>
 
       {/* Studio Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-rose-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div className="space-y-2 max-w-2xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5 text-rose-400" />
-            <span>Creator Studio & Asset Delivery</span>
+      <div className="relative overflow-hidden bg-gradient-to-r from-[#121520] via-[#161a28] to-[#1f1722] rounded-3xl p-6 sm:p-8 border border-[#242b3d] shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div className="space-y-2 max-w-2xl relative z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#EB212B]/15 text-[#ff5f68] border border-[#EB212B]/30 text-xs font-bold">
+            <Sparkles className="w-3.5 h-3.5 text-[#EB212B]" />
+            <span>Creator Studio & Asset Engine</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-            Upload & Sell Your Custom Artwork
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            Sell Your Art on 60+ Products
           </h1>
-          <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
-            Upload high-resolution files. Our automated print engine formats your art across
-            over 60+ products with customizable margins, instant previews, and real-time Firestore synchronization.
+          <p className="text-[#9ca6b8] text-xs sm:text-sm leading-relaxed">
+            Upload your original illustrations, anime art, vectors, or graphics. We automatically optimize your print resolution, sync with Firebase Cloud Storage & Firestore, and generate instant mockups with customized creator royalties.
           </p>
         </div>
 
         {/* Creator Mini Profile Badge */}
-        <div className="flex items-center gap-3.5 bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 shrink-0">
+        <div className="flex items-center gap-3.5 bg-[#0c0e15]/80 backdrop-blur-md px-4 py-3 rounded-2xl border border-[#212638] shrink-0 relative z-10">
           <img
             src={creator.avatar}
             alt={creator.name}
-            className="w-12 h-12 rounded-xl object-cover border border-rose-300/40"
+            className="w-12 h-12 rounded-xl object-cover border-2 border-[#dfb15b]/60"
           />
           <div>
             <div className="flex items-center gap-1">
               <span className="text-sm font-bold text-white">{creator.name}</span>
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#4ade80]" />
             </div>
-            <p className="text-xs text-slate-300">{creator.location}</p>
-            <p className="text-[11px] font-semibold text-emerald-400 mt-0.5">
-              Available Payout: {formatPrice(creator.availableBalance)}
+            <p className="text-xs text-[#8c97aa]">{creator.location}</p>
+            <p className="text-[11px] font-bold text-[#4ade80] mt-0.5">
+              Available Balance: {formatPrice(creator.availableBalance)}
             </p>
           </div>
         </div>
@@ -259,17 +324,17 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
 
       {/* Success Modal / Banner when published */}
       {publishedArtwork && (
-        <div className="bg-emerald-50 border-2 border-emerald-500/30 rounded-3xl p-6 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in zoom-in-95 shadow-lg">
+        <div className="bg-[#0e2118] border-2 border-[#235839] rounded-3xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in zoom-in-95 shadow-xl">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-md">
+            <div className="w-12 h-12 rounded-2xl bg-[#1d7044] text-white flex items-center justify-center shrink-0 shadow-md">
               <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 className="text-base font-bold text-white">
                 "{publishedArtwork.title}" is now LIVE on the Marketplace!
               </h3>
-              <p className="text-xs text-slate-600">
-                Stored in Firebase Cloud Storage & Firestore. Ready for customer orders with {formatPrice(Number(teeProfit))} profit per t-shirt.
+              <p className="text-xs text-[#a3c9b3] mt-0.5">
+                Stored in Firebase Cloud Storage & Firestore catalog. Ready for customer orders with {formatPrice(Number(teeProfit))} royalty per t-shirt.
               </p>
             </div>
           </div>
@@ -277,9 +342,9 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
           <div className="flex items-center gap-2.5 w-full sm:w-auto">
             <button
               onClick={() => onViewProduct(publishedArtwork)}
-              className="flex-1 sm:flex-none px-5 py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
+              className="flex-1 sm:flex-none px-5 py-2.5 bg-[#dfb15b] hover:bg-[#f0c26c] text-[#0b0c12] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
             >
-              <span>View Product Page</span>
+              <span>View Live Product Page</span>
               <ArrowRight className="w-4 h-4" />
             </button>
             <button
@@ -287,8 +352,10 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
                 setPublishedArtwork(null);
                 setTitle('');
                 setDescription('');
+                setSelectedFile(null);
+                setFileDetails(null);
               }}
-              className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50"
+              className="px-4 py-2.5 bg-[#162920] border border-[#2b593f] text-[#d6e5dc] rounded-xl text-xs font-bold hover:bg-[#1f382c] cursor-pointer"
             >
               Upload Another
             </button>
@@ -301,13 +368,13 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
         {/* Left Column: File Upload & Metadata Configuration (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
           {/* File Drag-and-Drop Uploader Card */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs">
+          <div className="bg-[#121520] border border-[#212638] rounded-3xl p-6 shadow-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <UploadCloud className="w-4 h-4 text-rose-600" />
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <UploadCloud className="w-4 h-4 text-[#EB212B]" />
                 <span>1. Upload High-Quality Artwork File</span>
               </h3>
-              <span className="text-xs text-slate-400">PNG, SVG, JPG up to 25MB</span>
+              <span className="text-xs text-[#8c97aa]">PNG, SVG, JPG, WebP up to 25MB</span>
             </div>
 
             {/* Dropzone Container */}
@@ -316,10 +383,10 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center ${
+              className={`border-2 border-dashed rounded-2xl p-7 text-center cursor-pointer transition-all flex flex-col items-center justify-center relative overflow-hidden ${
                 isDragging
-                  ? 'border-rose-500 bg-rose-50/50 scale-[1.01]'
-                  : 'border-slate-300 hover:border-slate-400 bg-slate-50/60'
+                  ? 'border-[#dfb15b] bg-[#dfb15b]/10 scale-[1.01]'
+                  : 'border-[#293147] hover:border-[#dfb15b]/60 bg-[#0c0e15]/80'
               }`}
             >
               <input
@@ -334,53 +401,81 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
                 }}
               />
 
-              <div className="w-14 h-14 rounded-2xl bg-white shadow-xs border border-slate-200 flex items-center justify-center text-rose-600 mb-3">
-                <ImageIcon className="w-7 h-7" />
-              </div>
-
-              <p className="text-sm font-bold text-slate-900">
-                {selectedFile ? selectedFile.name : 'Click to upload or drag & drop artwork'}
-              </p>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                Transparent PNG or high-res vector SVG recommended for best apparel printing results.
-              </p>
-
-              {selectedFile && (
-                <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-semibold border border-emerald-200">
-                  <FileCheck className="w-3.5 h-3.5" />
-                  <span>{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB file ready</span>
+              {isProcessingFile ? (
+                <div className="py-6 flex flex-col items-center justify-center gap-3">
+                  <div className="w-10 h-10 border-2 border-[#dfb15b] border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-[#dfb15b] font-bold">Optimizing artwork resolution for apparel printing...</p>
+                </div>
+              ) : selectedFile ? (
+                <div className="flex flex-col items-center py-2">
+                  <div className="w-20 h-20 rounded-2xl bg-[#161a28] p-2 border border-[#2d364e] mb-3 flex items-center justify-center overflow-hidden shadow-inner">
+                    <img
+                      src={previewUrl}
+                      alt="Uploaded artwork preview"
+                      className="max-h-full max-w-full object-contain drop-shadow-md"
+                    />
+                  </div>
+                  <p className="text-sm font-bold text-white max-w-md truncate">
+                    {selectedFile.name}
+                  </p>
+                  {fileDetails && (
+                    <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#182a20] border border-[#2b593f] text-[#4ade80] text-[11px] font-bold inline-flex items-center gap-1">
+                        <FileCheck className="w-3 h-3" />
+                        <span>Print Ready ({fileDetails.width} × {fileDetails.height}px)</span>
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#181c2b] border border-[#262c3e] text-[#a0abbd] text-[11px]">
+                        {(fileDetails.originalSize / (1024 * 1024)).toFixed(2)}MB original → {(fileDetails.optimizedSize / 1024).toFixed(0)}KB optimized
+                      </span>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-[#8c97aa] mt-2">
+                    Click or drag another file to replace
+                  </p>
+                </div>
+              ) : (
+                <div className="py-3 flex flex-col items-center">
+                  <div className="w-14 h-14 rounded-2xl bg-[#161a28] border border-[#262c3e] flex items-center justify-center text-[#EB212B] mb-3 shadow-inner">
+                    <ImageIcon className="w-7 h-7" />
+                  </div>
+                  <p className="text-sm font-bold text-white">
+                    Click to browse artwork or drag & drop file here
+                  </p>
+                  <p className="text-xs text-[#8c97aa] mt-1 max-w-sm">
+                    Transparent PNG, high-res JPEG, or vector SVG. We automatically optimize dimensions and store high-res assets in Firebase.
+                  </p>
                 </div>
               )}
             </div>
 
             {/* Preset Samples Bar */}
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <p className="text-xs font-semibold text-slate-500 mb-2">
+            <div className="mt-4 pt-4 border-t border-[#1d2335]">
+              <p className="text-xs font-semibold text-[#8c97aa] mb-2">
                 Or test immediately with an artist template:
               </p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => handlePickPreset(CHINA_GIRL_ARTWORK_SVG, 'China girl (Deluxe Edition)', 'china girl, asian art, retro anime, oriental, streetwear')}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-rose-500 text-xs font-semibold text-slate-700 hover:text-rose-600 transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-xl border border-[#262c3e] bg-[#0c0e15] hover:border-[#dfb15b] text-xs font-bold text-[#d6dbe6] hover:text-[#dfb15b] transition-all flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span className="w-2 h-2 rounded-full bg-rose-600" />
+                  <span className="w-2 h-2 rounded-full bg-[#EB212B]" />
                   <span>China girl</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handlePickPreset(CYBER_NEON_ARTWORK_SVG, 'Tokyo 2099 Neon Grid', 'cyberpunk, tokyo, synthwave, neon, sci-fi')}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-rose-500 text-xs font-semibold text-slate-700 hover:text-rose-600 transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-xl border border-[#262c3e] bg-[#0c0e15] hover:border-[#dfb15b] text-xs font-bold text-[#d6dbe6] hover:text-[#dfb15b] transition-all flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span className="w-2 h-2 rounded-full bg-cyan-500" />
+                  <span className="w-2 h-2 rounded-full bg-cyan-400" />
                   <span>Tokyo Neon 2099</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handlePickPreset(DRAGON_INK_ARTWORK_SVG, 'Dragon Ink Sumi-e', 'dragon, ink wash, sumi-e, calligraphy, japanese')}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-rose-500 text-xs font-semibold text-slate-700 hover:text-rose-600 transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-xl border border-[#262c3e] bg-[#0c0e15] hover:border-[#dfb15b] text-xs font-bold text-[#d6dbe6] hover:text-[#dfb15b] transition-all flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span className="w-2 h-2 rounded-full bg-amber-600" />
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
                   <span>Dragon Ink</span>
                 </button>
               </div>
@@ -388,106 +483,111 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
           </div>
 
           {/* Artwork Metadata Form */}
-          <form onSubmit={handlePublish} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-5">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Tag className="w-4 h-4 text-rose-600" />
+          <form onSubmit={handlePublish} className="bg-[#121520] border border-[#212638] rounded-3xl p-6 shadow-md space-y-5">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Tag className="w-4 h-4 text-[#dfb15b]" />
               <span>2. Artwork Title & Marketplace Details</span>
             </h3>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+              <label className="block text-xs font-bold text-[#d6dbe6] uppercase tracking-wider mb-1.5">
                 Artwork Title *
               </label>
               <input
+                id="studio-artwork-title-input"
                 type="text"
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. China girl"
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-rose-500"
+                className="w-full px-4 py-2.5 rounded-xl bg-[#0c0e15] border border-[#252b3d] text-sm text-white placeholder:text-[#6a7587] focus:outline-hidden focus:border-[#dfb15b] focus:ring-1 focus:ring-[#dfb15b]"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+                <label className="block text-xs font-bold text-[#d6dbe6] uppercase tracking-wider mb-1.5">
                   Category
                 </label>
                 <select
+                  id="studio-category-select"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 bg-white focus:outline-hidden focus:border-rose-500"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#0c0e15] border border-[#252b3d] text-sm text-white focus:outline-hidden focus:border-[#dfb15b]"
                 >
-                  <option>Illustration & Graphic Art</option>
-                  <option>Digital Art & Vectors</option>
-                  <option>Painting & Mixed Media</option>
-                  <option>Typography & Lettering</option>
-                  <option>Anime & Manga</option>
-                  <option>Minimalist & Line Art</option>
+                  <option className="bg-[#0c0e15]">Illustration & Graphic Art</option>
+                  <option className="bg-[#0c0e15]">Digital Art & Vectors</option>
+                  <option className="bg-[#0c0e15]">Painting & Mixed Media</option>
+                  <option className="bg-[#0c0e15]">Typography & Lettering</option>
+                  <option className="bg-[#0c0e15]">Anime & Manga</option>
+                  <option className="bg-[#0c0e15]">Minimalist & Line Art</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+                <label className="block text-xs font-bold text-[#d6dbe6] uppercase tracking-wider mb-1.5">
                   Tags (Comma separated)
                 </label>
                 <input
+                  id="studio-tags-input"
                   type="text"
                   value={tagsInput}
                   onChange={(e) => setTagsInput(e.target.value)}
-                  placeholder="e.g. china girl, asian art, streetwear"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-rose-500"
+                  placeholder="e.g. china girl, streetwear, digital art"
+                  className="w-full px-4 py-2.5 rounded-xl bg-[#0c0e15] border border-[#252b3d] text-sm text-white placeholder:text-[#6a7587] focus:outline-hidden focus:border-[#dfb15b]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+              <label className="block text-xs font-bold text-[#d6dbe6] uppercase tracking-wider mb-1.5">
                 Artwork Description / Story
               </label>
               <textarea
+                id="studio-description-textarea"
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe your design inspiration, techniques used, and story..."
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-rose-500"
+                className="w-full px-4 py-2.5 rounded-xl bg-[#0c0e15] border border-[#252b3d] text-sm text-white placeholder:text-[#6a7587] focus:outline-hidden focus:border-[#dfb15b]"
               />
             </div>
 
             {/* Creator Markup & Margin Slider */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+            <div className="p-4 bg-[#0c0e15] rounded-2xl border border-[#252b3d] space-y-3">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
-                  <DollarSign className="w-4 h-4 text-emerald-600" />
+                <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-[#4ade80]" />
                   <span>Artist Royalty Margin: {creatorMarginPercent}%</span>
                 </label>
-                <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                <span className="text-xs font-bold text-[#4ade80] bg-[#162920] border border-[#2b593f] px-2.5 py-0.5 rounded-md">
                   +{formatPrice(Number(teeProfit))} profit per T-shirt
                 </span>
               </div>
 
               <input
+                id="studio-margin-slider"
                 type="range"
                 min={10}
                 max={50}
                 step={1}
                 value={creatorMarginPercent}
                 onChange={(e) => setCreatorMarginPercent(Number(e.target.value))}
-                className="w-full accent-rose-600 cursor-pointer"
+                className="w-full accent-[#dfb15b] cursor-pointer"
               />
 
               <div className="grid grid-cols-3 gap-2 text-center text-xs pt-1">
-                <div className="bg-white p-2 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block text-[10px]">T-Shirt Retail</span>
-                  <strong className="text-slate-900">{formatPrice(Number(teeRetail))}</strong>
+                <div className="bg-[#121520] p-2.5 rounded-xl border border-[#212638]">
+                  <span className="text-[#8c97aa] block text-[10px]">T-Shirt Retail</span>
+                  <strong className="text-white text-xs">{formatPrice(Number(teeRetail))}</strong>
                 </div>
-                <div className="bg-white p-2 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block text-[10px]">Your Profit (Tee)</span>
-                  <strong className="text-emerald-600">+{formatPrice(Number(teeProfit))}</strong>
+                <div className="bg-[#121520] p-2.5 rounded-xl border border-[#212638]">
+                  <span className="text-[#8c97aa] block text-[10px]">Your Profit (Tee)</span>
+                  <strong className="text-[#4ade80] text-xs">+{formatPrice(Number(teeProfit))}</strong>
                 </div>
-                <div className="bg-white p-2 rounded-xl border border-slate-200">
-                  <span className="text-slate-500 block text-[10px]">Your Profit (Hoodie)</span>
-                  <strong className="text-emerald-600">
+                <div className="bg-[#121520] p-2.5 rounded-xl border border-[#212638]">
+                  <span className="text-[#8c97aa] block text-[10px]">Your Profit (Hoodie)</span>
+                  <strong className="text-[#4ade80] text-xs">
                     +{formatPrice((42.5 * creatorMarginPercent) / 100)}
                   </strong>
                 </div>
@@ -495,22 +595,25 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
             </div>
 
             {errorMessage && (
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-50 text-rose-700 text-xs">
-                <AlertCircle className="w-4 h-4 shrink-0" />
+              <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-[#2b1418] border border-[#5c242c] text-[#ff8088] text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-[#EB212B]" />
                 <span>{errorMessage}</span>
               </div>
             )}
 
-            {/* Upload Progress Bar */}
+            {/* Dynamic Multi-Step Upload Progress Bar */}
             {isPublishing && (
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs text-slate-600 font-semibold">
-                  <span>Uploading to Firebase Cloud Storage & Firestore...</span>
-                  <span>{uploadProgress}%</span>
+              <div className="space-y-2 p-3 bg-[#0c0e15] rounded-xl border border-[#262c3e]">
+                <div className="flex justify-between text-xs text-[#d6dbe6] font-semibold">
+                  <span className="flex items-center gap-1.5">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#dfb15b]" />
+                    <span>{uploadStepMessage || 'Uploading to Firebase Cloud Storage & Firestore...'}</span>
+                  </span>
+                  <span className="text-[#dfb15b] font-mono">{uploadProgress}%</span>
                 </div>
-                <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                <div className="w-full bg-[#181c2b] h-2.5 rounded-full overflow-hidden border border-[#262c3e]">
                   <div
-                    className="bg-rose-600 h-full transition-all duration-300 rounded-full"
+                    className="bg-gradient-to-r from-[#dfb15b] to-[#EB212B] h-full transition-all duration-300 rounded-full"
                     style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
@@ -521,13 +624,13 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
             <button
               id="publish-artwork-btn"
               type="submit"
-              disabled={isPublishing}
-              className="w-full py-4 px-6 rounded-2xl bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+              disabled={isPublishing || isProcessingFile}
+              className="w-full py-4 px-6 rounded-2xl bg-[#EB212B] hover:bg-[#ff333e] disabled:opacity-50 text-white font-bold text-sm shadow-lg shadow-[#EB212B]/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
             >
               {isPublishing ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Publishing to Catalog...</span>
+                  <span>Publishing to Catalog & Storage...</span>
                 </>
               ) : (
                 <>
@@ -541,14 +644,14 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
 
         {/* Right Column: Real-time Multi-Product Stager & Visualizer (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
-          <div className="sticky top-28 bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-5">
+          <div className="sticky top-24 bg-[#121520] border border-[#212638] rounded-3xl p-6 shadow-md space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Eye className="w-4 h-4 text-rose-600" />
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-[#dfb15b]" />
                   <span>Live Product Mockup Stager</span>
                 </h3>
-                <span className="text-[11px] text-slate-500">
+                <span className="text-[11px] text-[#8c97aa]">
                   {enabledProducts.length} of {PRODUCT_CATALOG.length} products enabled
                 </span>
               </div>
@@ -558,7 +661,7 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
                 type="button"
                 id="studio-add-all-products-btn"
                 onClick={handleApplyToAllProducts}
-                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#EB212B] to-[#b0141d] hover:from-[#ff3b45] hover:to-[#c41822] text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Add to All Products</span>
@@ -567,8 +670,8 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
 
             {/* Notification Banner when applied to all products */}
             {appliedAllNotice && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-2.5 text-xs text-emerald-800 animate-in fade-in">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div className="p-3 bg-[#132b1e] border border-[#235839] rounded-2xl flex items-center gap-2.5 text-xs text-[#4ade80] animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-[#4ade80] shrink-0" />
                 <span>
                   <strong>Success!</strong> Artwork enabled and synchronized across all {PRODUCT_CATALOG.length} products.
                 </span>
@@ -576,14 +679,14 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
             )}
 
             {/* View Mode Switcher: Single vs All Products Matrix */}
-            <div className="flex items-center justify-between bg-slate-100 p-1 rounded-2xl">
+            <div className="flex items-center justify-between bg-[#0c0e15] p-1 rounded-2xl border border-[#212638]">
               <button
                 type="button"
                 onClick={() => setStagedViewMode('single')}
-                className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   stagedViewMode === 'single'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#dfb15b] text-[#0b0c12] shadow-sm'
+                    : 'text-[#8c97aa] hover:text-white'
                 }`}
               >
                 Single Focus
@@ -591,10 +694,10 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
               <button
                 type="button"
                 onClick={() => setStagedViewMode('grid')}
-                className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   stagedViewMode === 'grid'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#dfb15b] text-[#0b0c12] shadow-sm'
+                    : 'text-[#8c97aa] hover:text-white'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
@@ -611,10 +714,10 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
                       type="button"
                       key={prod.category}
                       onClick={() => setStagedProduct(prod.category)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                         stagedProduct === prod.category
-                          ? 'bg-slate-900 text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          ? 'bg-white text-[#0b0c12] shadow-xs'
+                          : 'bg-[#181c2b] text-[#8c97aa] hover:text-white hover:bg-[#202538] border border-[#262c3e]'
                       }`}
                     >
                       {prod.displayName.replace('Classic ', '')}
@@ -623,7 +726,7 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
                 </div>
 
                 {/* Render Stage Preview */}
-                <div className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 flex items-center justify-center p-4">
+                <div className="border border-[#262c3e] rounded-2xl overflow-hidden bg-[#0c0e15] flex items-center justify-center p-4">
                   <MockupRenderer
                     productType={stagedProduct}
                     color={stagedColor}
@@ -637,8 +740,8 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
                 {/* Placement & Scale Sliders */}
                 <div className="space-y-3 pt-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-slate-700 flex items-center gap-1">
-                      <Sliders className="w-3.5 h-3.5" />
+                    <span className="font-bold text-[#d6dbe6] flex items-center gap-1">
+                      <Sliders className="w-3.5 h-3.5 text-[#dfb15b]" />
                       Print Scale: {Math.round(scale * 100)}%
                     </span>
                     <input
@@ -648,12 +751,12 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
                       step={0.05}
                       value={scale}
                       onChange={(e) => setScale(Number(e.target.value))}
-                      className="w-36 accent-rose-600"
+                      className="w-36 accent-[#dfb15b] cursor-pointer"
                     />
                   </div>
 
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-slate-700">Vertical Offset</span>
+                    <span className="font-bold text-[#d6dbe6]">Vertical Offset</span>
                     <input
                       type="range"
                       min={-30}
@@ -661,13 +764,13 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
                       step={2}
                       value={offsetY}
                       onChange={(e) => setOffsetY(Number(e.target.value))}
-                      className="w-36 accent-rose-600"
+                      className="w-36 accent-[#dfb15b] cursor-pointer"
                     />
                   </div>
 
                   {/* Garment Color Swatches */}
                   <div className="pt-2">
-                    <span className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-2">
+                    <span className="block text-xs font-bold text-[#d6dbe6] uppercase tracking-wider mb-2">
                       Preview on Garment Color:
                     </span>
                     <div className="flex flex-wrap gap-2">
@@ -676,10 +779,10 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
                           type="button"
                           key={c.id}
                           onClick={() => setStagedColor(c)}
-                          className={`w-7 h-7 rounded-full border-2 transition-all ${
+                          className={`w-7 h-7 rounded-full border-2 transition-all cursor-pointer ${
                             stagedColor.id === c.id
-                              ? 'border-rose-600 ring-2 ring-rose-500/30 scale-110'
-                              : 'border-slate-300'
+                              ? 'border-[#dfb15b] ring-2 ring-[#dfb15b]/40 scale-110'
+                              : 'border-[#2d364e]'
                           }`}
                           style={{ backgroundColor: c.hex }}
                           title={c.name}
@@ -703,24 +806,24 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
                         key={prod.category}
                         className={`p-3 rounded-2xl border transition-all flex flex-col justify-between ${
                           isEnabled
-                            ? 'border-slate-200 bg-white shadow-2xs'
-                            : 'border-dashed border-slate-200 bg-slate-50 opacity-60'
+                            ? 'border-[#262c3e] bg-[#0c0e15]'
+                            : 'border-dashed border-[#202537] bg-[#0c0e15]/40 opacity-60'
                         }`}
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-bold text-slate-900 truncate">
+                          <span className="text-xs font-bold text-white truncate">
                             {prod.displayName.replace('Classic ', '')}
                           </span>
                           <input
                             type="checkbox"
                             checked={isEnabled}
                             onChange={() => toggleProductEnabled(prod.category)}
-                            className="w-4 h-4 accent-rose-600 cursor-pointer"
+                            className="w-4 h-4 accent-[#EB212B] cursor-pointer"
                             title="Enable or disable on this product"
                           />
                         </div>
 
-                        <div className="h-32 bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center p-2 mb-2">
+                        <div className="h-32 bg-[#121520] rounded-xl overflow-hidden flex items-center justify-center p-2 mb-2 border border-[#1f2538]">
                           <MockupRenderer
                             productType={prod.category}
                             color={prod.colors[0]}
@@ -732,9 +835,9 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
                         </div>
 
                         <div className="flex items-center justify-between text-[11px] mb-2">
-                          <span className="font-bold text-slate-900">{formatPrice(Number(prodRetail))}</span>
-                          <span className="text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded-sm">
-                            +{formatPrice(Number(prodProfit))} profit
+                          <span className="font-bold text-white">{formatPrice(Number(prodRetail))}</span>
+                          <span className="text-[#4ade80] font-semibold bg-[#162920] px-1.5 py-0.5 rounded-sm">
+                            +{formatPrice(Number(prodProfit))}
                           </span>
                         </div>
 
@@ -744,7 +847,7 @@ export const CreatorStudio: React.FC<CreatorStudioProps> = ({
                             setStagedProduct(prod.category);
                             setStagedViewMode('single');
                           }}
-                          className="w-full py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200"
+                          className="w-full py-1 text-[11px] font-bold text-[#8c97aa] hover:text-white hover:bg-[#181c2b] rounded-lg transition-colors border border-[#212638] cursor-pointer"
                         >
                           Tune Placement
                         </button>

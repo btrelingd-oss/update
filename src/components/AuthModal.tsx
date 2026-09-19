@@ -143,7 +143,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <MxLogo size="lg" showText={false} />
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            {mode === 'signup' ? 'Create MX Gallery Account' : 'Sign in to MX Gallery'}
+            {mode === 'signup' ? 'Create mx gallery Account' : 'Sign in to mx gallery'}
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Access your creator studio, saved designs, bank payouts & orders

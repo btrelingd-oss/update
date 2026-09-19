@@ -49,7 +49,10 @@ import {
   Home,
   ArrowUpDown,
   ChevronDown,
-  SlidersHorizontal
+  SlidersHorizontal,
+  CheckCircle2,
+  ArrowRight,
+  X
 } from 'lucide-react';
 import { useCurrency } from './context/CurrencyContext';
 
@@ -57,7 +60,16 @@ export type MarketplaceSortOption = 'newest' | 'popularity' | 'price-low' | 'pri
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'product' | 'studio' | 'dashboard' | 'explore' | 'portfolio'>('explore');
-  const [artworks, setArtworks] = useState<Artwork[]>(INITIAL_ARTWORKS);
+  const [artworks, setArtworks] = useState<Artwork[]>(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('mx_custom_artworks') || '[]');
+      if (Array.isArray(cached) && cached.length > 0) {
+        const cachedIds = new Set(cached.map((c: any) => c.id));
+        return [...cached, ...INITIAL_ARTWORKS.filter((a) => !cachedIds.has(a.id))];
+      }
+    } catch {}
+    return INITIAL_ARTWORKS;
+  });
   const [currentArtwork, setCurrentArtwork] = useState<Artwork>(INITIAL_ARTWORKS[0]);
   const [creator, setCreator] = useState<CreatorProfile>(INITIAL_CREATOR);
   const [portfolioCreator, setPortfolioCreator] = useState<CreatorProfile>(INITIAL_CREATOR);
@@ -73,6 +85,7 @@ export default function App() {
   const [isFollowingCreator, setIsFollowingCreator] = useState(false);
   const [firebaseReady, setFirebaseReady] = useState(false);
   const [marketplaceSort, setMarketplaceSort] = useState<MarketplaceSortOption>('popularity');
+  const [recentlyPublishedArt, setRecentlyPublishedArt] = useState<Artwork | null>(null);
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup'>('signin');
@@ -140,7 +153,16 @@ export default function App() {
           snapshot.forEach((doc) => {
             list.push(doc.data() as Artwork);
           });
-          setArtworks(list);
+
+          // Merge Firestore artworks with any local custom uploads
+          try {
+            const cached: Artwork[] = JSON.parse(localStorage.getItem('mx_custom_artworks') || '[]');
+            const firestoreIds = new Set(list.map((a) => a.id));
+            const extraCustom = cached.filter((c) => !firestoreIds.has(c.id));
+            setArtworks([...extraCustom, ...list]);
+          } catch {
+            setArtworks(list);
+          }
 
           // If current artwork is updated or not set, keep it synced
           const found = list.find((a) => a.id === currentArtwork.id);
@@ -456,7 +478,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FBFBFA] flex flex-col font-sans text-slate-900 antialiased selection:bg-rose-500 selection:text-white">
+    <div className="min-h-screen bg-[#0b0c12] flex flex-col font-sans text-slate-100 antialiased selection:bg-[#dfb15b] selection:text-[#0b0c12]">
       {/* Header */}
       <Header
         activeTab={activeTab}
@@ -477,14 +499,14 @@ export default function App() {
         {/* Search / Category Filter Bar Results notice */}
         {searchQuery && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between text-xs shadow-2xs">
-              <p className="text-slate-600">
-                Found <strong>{filteredArtworks.length}</strong> designs matching "
-                <strong className="text-slate-900">{searchQuery}</strong>"
+            <div className="bg-[#121522] border border-[#23283a] rounded-2xl p-4 flex items-center justify-between text-xs shadow-xl">
+              <p className="text-[#9ca6b8]">
+                Found <strong className="text-white">{filteredArtworks.length}</strong> designs matching "
+                <strong className="text-[#dfb15b]">{searchQuery}</strong>"
               </p>
               <button
                 onClick={() => setSearchQuery('')}
-                className="text-rose-600 font-bold hover:underline cursor-pointer"
+                className="text-[#dfb15b] hover:text-[#f3cd82] font-bold hover:underline cursor-pointer"
               >
                 Clear Search
               </button>
@@ -536,8 +558,11 @@ export default function App() {
           <CreatorStudio
             creator={creator}
             onArtworkPublished={(newArt) => {
-              setArtworks((prev) => [newArt, ...prev]);
+              setArtworks((prev) => [newArt, ...prev.filter((a) => a.id !== newArt.id)]);
               setCurrentArtwork(newArt);
+              setRecentlyPublishedArt(newArt);
+              setMarketplaceSort('newest');
+              handleNavigateToMarketplace();
             }}
             onViewProduct={(art) => {
               setCurrentArtwork(art);
@@ -563,19 +588,73 @@ export default function App() {
           />
         )}
 
-        {/* View Switcher: Explore / Marketplace Gallery */}
+        {/* View Switcher: Explore / Marketplace Gallery (Shop Home) */}
         {activeTab === 'explore' && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+            {/* Automatic Return Success Banner when user sells/publishes a project */}
+            {recentlyPublishedArt && (
+              <div 
+                id="recently-published-announcement"
+                className="bg-gradient-to-r from-[#0f2419] via-[#142d1f] to-[#1a2318] border-2 border-[#2b593f] rounded-3xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl animate-in fade-in slide-in-from-top-4 duration-300"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-[#0b1610] p-1.5 border border-[#2b593f] flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+                    <img 
+                      src={recentlyPublishedArt.imageUrl} 
+                      alt={recentlyPublishedArt.title} 
+                      className="w-full h-full object-contain drop-shadow-sm" 
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#1e402b] text-[#4ade80] text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border border-[#2d613f]">
+                        <CheckCircle2 className="w-3 h-3 text-[#4ade80]" />
+                        <span>Project Published & Live on Shop Home</span>
+                      </span>
+                      <span className="text-[11px] text-[#8ea699]">Synced to Firebase Firestore</span>
+                    </div>
+                    <h3 className="text-base font-black text-white">
+                      "{recentlyPublishedArt.title}"
+                    </h3>
+                    <p className="text-xs text-[#a2c8b1] mt-0.5">
+                      Your artwork is now live for purchase across all 60+ products. Earn +{formatPrice((19.99 * (recentlyPublishedArt.creatorMarginPercent || 20)) / 100)} profit per T-shirt!
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0">
+                  <button
+                    id="view-live-published-product-btn"
+                    type="button"
+                    onClick={() => handleSelectArtwork(recentlyPublishedArt)}
+                    className="flex-1 sm:flex-none px-4 py-2.5 bg-[#dfb15b] hover:bg-[#f0c26c] text-[#0b0c12] rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95"
+                  >
+                    <span>View Product Page</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRecentlyPublishedArt(null)}
+                    className="p-2 text-[#8ea699] hover:text-white rounded-xl hover:bg-[#183626] border border-transparent hover:border-[#2b593f] transition-all cursor-pointer"
+                    title="Dismiss notice"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <div className="flex items-center gap-2 text-xs font-bold text-rose-600 uppercase tracking-wider mb-1">
-                  <Sparkles className="w-4 h-4" />
+                <div className="flex items-center gap-2 text-xs font-bold text-[#dfb15b] uppercase tracking-wider mb-1">
+                  <span className="w-2 h-2 rounded-full bg-[#EB212B] inline-block animate-pulse" />
+                  <Sparkles className="w-4 h-4 text-[#dfb15b]" />
                   <span>Independent Artist Marketplace</span>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-black text-slate-900">
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                   Explore Creator Designs
                 </h2>
-                <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                <p className="text-xs sm:text-sm text-[#8a96aa] mt-1">
                   Every purchase directly funds independent artists with custom profit margins.
                 </p>
               </div>
@@ -586,10 +665,10 @@ export default function App() {
                   id="marketplace-filter-art-design"
                   type="button"
                   onClick={() => handleFilterByGenre('Art & Design')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border uppercase tracking-wider ${
                     searchQuery.toLowerCase() === 'art & design'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                      : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
+                      ? 'bg-[#dfb15b] text-[#0b0c12] border-[#dfb15b] shadow-sm font-black'
+                      : 'bg-[#121520] text-[#a1acbe] hover:text-white border-[#24293a] hover:border-[#dfb15b]/40'
                   }`}
                 >
                   🎨 Art & Design
@@ -598,33 +677,33 @@ export default function App() {
                   id="marketplace-filter-china-girl"
                   type="button"
                   onClick={() => handleFilterByGenre('China girl')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border uppercase tracking-wider ${
                     searchQuery.toLowerCase() === 'china girl'
-                      ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                      : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200'
+                      ? 'bg-[#EB212B] text-white border-[#EB212B] shadow-sm'
+                      : 'bg-[#181216] text-[#ff808d] hover:bg-[#28151c] border-[#441a23]'
                   }`}
                 >
                   ✨ China girl
                 </button>
-                <span className="text-xs font-semibold text-slate-500 ml-1">
+                <span className="text-xs font-semibold text-[#737f94] ml-1">
                   {sortedArtworks.length} {sortedArtworks.length === 1 ? 'artwork' : 'artworks'}
                 </span>
               </div>
             </div>
 
             {/* Category Filter Pills in Explore */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-100 whitespace-nowrap">
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-[#1b2030] whitespace-nowrap">
               <button
                 id="explore-category-all"
                 type="button"
                 onClick={() => handleSelectCategory('all')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 uppercase tracking-wider ${
                   selectedCategory === 'all'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    ? 'bg-[#dfb15b] text-[#0b0c12] font-black shadow-md border border-[#dfb15b]'
+                    : 'bg-[#121520] text-[#8e98ab] hover:text-white border border-[#232838] hover:border-[#dfb15b]/40'
                 }`}
               >
-                <Home className="w-3.5 h-3.5 text-rose-500" />
+                <Home className="w-3.5 h-3.5" />
                 <span>Shop Home (All Products)</span>
               </button>
               {PRODUCT_CATALOG.map((prod) => {
@@ -635,10 +714,10 @@ export default function App() {
                     id={`explore-category-${prod.category}`}
                     type="button"
                     onClick={() => handleSelectCategory(prod.category)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer uppercase tracking-wider ${
                       isActive
-                        ? 'bg-rose-600 text-white font-bold shadow-xs'
-                        : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                        ? 'bg-[#dfb15b] text-[#0b0c12] font-black shadow-md border border-[#dfb15b]'
+                        : 'bg-[#121520] text-[#8e98ab] hover:text-white border border-[#232838] hover:border-[#dfb15b]/40'
                     }`}
                   >
                     {prod.displayName}
@@ -649,20 +728,20 @@ export default function App() {
 
             {/* Marketplace Gallery Control & Sort Filter Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[#7e899c]">
                 <span>
-                  Showing <strong className="font-bold text-slate-900">{sortedArtworks.length}</strong> {sortedArtworks.length === 1 ? 'artwork' : 'artworks'}
+                  Showing <strong className="font-bold text-white">{sortedArtworks.length}</strong> {sortedArtworks.length === 1 ? 'artwork' : 'artworks'}
                 </span>
                 {selectedCategory !== 'all' && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#1a1f30] text-[#dfb15b] border border-[#dfb15b]/30">
                     <span>Category:</span>
                     <strong className="font-bold">{PRODUCT_CATALOG.find((p) => p.category === selectedCategory)?.displayName || selectedCategory}</strong>
                   </span>
                 )}
                 {searchQuery && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#1a1f30] text-white border border-[#2a3147]">
                     <span>Filter:</span>
-                    <strong className="font-bold">"{searchQuery}"</strong>
+                    <strong className="font-bold text-[#dfb15b]">"{searchQuery}"</strong>
                   </span>
                 )}
               </div>
@@ -671,9 +750,9 @@ export default function App() {
               <div className="flex items-center gap-2 self-start sm:self-auto" id="marketplace-sort-dropdown">
                 <label 
                   htmlFor="marketplace-sort-select" 
-                  className="text-xs font-bold text-slate-700 flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  className="text-xs font-bold text-[#9ca6b8] flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
-                  <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
+                  <ArrowUpDown className="w-3.5 h-3.5 text-[#dfb15b]" />
                   <span>Sort by:</span>
                 </label>
                 <div className="relative">
@@ -681,14 +760,14 @@ export default function App() {
                     id="marketplace-sort-select"
                     value={marketplaceSort}
                     onChange={(e) => setMarketplaceSort(e.target.value as MarketplaceSortOption)}
-                    className="appearance-none bg-white text-slate-800 text-xs font-bold pl-3.5 pr-8 py-2 rounded-xl border border-slate-200 shadow-2xs hover:border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 cursor-pointer transition-all"
+                    className="appearance-none bg-[#121520] text-white text-xs font-bold pl-3.5 pr-8 py-2 rounded-xl border border-[#252a3d] hover:border-[#dfb15b]/50 focus:outline-hidden focus:border-[#dfb15b] cursor-pointer transition-all shadow-md"
                   >
-                    <option value="newest">Newest</option>
-                    <option value="popularity">Popularity</option>
-                    <option value="price-low">Price: Low to High</option>
-                    <option value="price-high">Price: High to Low</option>
+                    <option value="newest" className="bg-[#121520] text-white">Newest</option>
+                    <option value="popularity" className="bg-[#121520] text-white">Popularity</option>
+                    <option value="price-low" className="bg-[#121520] text-white">Price: Low to High</option>
+                    <option value="price-high" className="bg-[#121520] text-white">Price: High to Low</option>
                   </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-500 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  <ChevronDown className="w-3.5 h-3.5 text-[#7e899c] pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
                 </div>
               </div>
             </div>
@@ -696,22 +775,22 @@ export default function App() {
             {/* Artwork Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {sortedArtworks.length === 0 ? (
-                <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-slate-200 p-8">
-                  <Palette className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <h3 className="text-base font-bold text-slate-800">No artworks found</h3>
-                  <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                <div className="col-span-full py-16 text-center bg-[#121522] rounded-3xl border border-[#23283a] p-8">
+                  <Palette className="w-12 h-12 text-[#4b556b] mx-auto mb-3" />
+                  <h3 className="text-base font-bold text-white">No artworks found</h3>
+                  <p className="text-xs text-[#8a96aa] mt-1 max-w-sm mx-auto">
                     Try clearing your search query or selecting another category.
                   </p>
                   <button
                     type="button"
                     onClick={handleNavigateToMarketplace}
-                    className="mt-4 px-4 py-2 bg-rose-600 text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition-colors cursor-pointer"
+                    className="mt-4 px-4 py-2 bg-[#dfb15b] text-[#0b0c12] text-xs font-black rounded-xl hover:bg-[#ebd085] transition-colors cursor-pointer"
                   >
                     Reset Filters & View All
                   </button>
                 </div>
               ) : (
-                sortedArtworks.map((art) => {
+                sortedArtworks.map((art, index) => {
                   const isChinaGirl = art.title.toLowerCase().includes('china girl');
                   const activePrice = selectedCategory !== 'all'
                     ? (() => {
@@ -724,18 +803,21 @@ export default function App() {
 
                   return (
                     <div
-                      key={art.id}
+                      key={`${art.id}-${marketplaceSort}-${selectedCategory}-${searchQuery}`}
                       id={`explore-card-${art.id}`}
                       onClick={() => handleSelectArtwork(art)}
-                      className={`group bg-white rounded-3xl border overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300 flex flex-col ${
+                      className={`animate-fade-in group bg-[#121522] rounded-3xl border overflow-hidden cursor-pointer hover:shadow-2xl transition-all duration-300 flex flex-col ${
                         isChinaGirl
-                          ? 'border-rose-300 ring-2 ring-rose-500/20'
-                          : 'border-slate-200 hover:border-slate-300'
+                          ? 'border-[#dfb15b]/50 ring-1 ring-[#dfb15b]/30 shadow-[0_4px_25px_rgba(223,177,91,0.08)]'
+                          : 'border-[#212638] hover:border-[#dfb15b]/40'
                       }`}
+                      style={{
+                        animationDelay: `${Math.min(index, 15) * 50}ms`,
+                      }}
                     >
-                      <div className="aspect-square bg-slate-50 p-6 flex items-center justify-center overflow-hidden relative">
+                      <div className="aspect-square bg-[#0b0d14] p-6 flex items-center justify-center overflow-hidden relative">
                         {isChinaGirl && (
-                          <div className="absolute top-3 left-3 z-10 bg-rose-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-xs flex items-center gap-1">
+                          <div className="absolute top-3 left-3 z-10 bg-[#EB212B] text-white text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-md flex items-center gap-1">
                             <Sparkles className="w-3 h-3" />
                             <span>Featured Original</span>
                           </div>
@@ -746,19 +828,19 @@ export default function App() {
                           className="w-full h-full object-contain group-hover:scale-108 transition-transform duration-500"
                         />
                       </div>
-                      <div className="p-5 border-t border-slate-100 flex-1 flex flex-col justify-between">
+                      <div className="p-5 border-t border-[#1d2232] flex-1 flex flex-col justify-between">
                         <div>
-                          <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
-                            <span>{art.category}</span>
+                          <div className="flex items-center justify-between text-[11px] text-[#717d91] mb-1">
+                            <span className="uppercase tracking-wider font-semibold text-[#8a96aa]">{art.category}</span>
                             <div className="flex items-center gap-2">
-                              <span className="text-slate-400 font-medium">❤️ {art.likesCount}</span>
-                              <span className="font-semibold text-emerald-600">+{art.creatorMarginPercent}% margin</span>
+                              <span className="text-[#8a96ab] font-medium">❤️ {art.likesCount}</span>
+                              <span className="font-semibold text-emerald-400">+{art.creatorMarginPercent}% margin</span>
                             </div>
                           </div>
-                          <h3 className="font-black text-base text-slate-900 group-hover:text-rose-600 transition-colors line-clamp-1">
+                          <h3 className="font-black text-base text-white group-hover:text-[#dfb15b] transition-colors line-clamp-1">
                             {art.title}
                           </h3>
-                          <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                          <p className="text-xs text-[#8a96aa] mt-1 flex items-center gap-1">
                             <span>by</span>
                             <button
                               id={`explore-card-artist-${art.id}`}
@@ -767,24 +849,24 @@ export default function App() {
                                 e.stopPropagation();
                                 handleSelectCreatorByName(art.creatorName, art.creatorId);
                               }}
-                              className="font-bold text-slate-900 hover:text-rose-600 hover:underline cursor-pointer inline-flex items-center gap-1 transition-colors group/artistlink"
+                              className="font-bold text-[#c5cddb] hover:text-[#dfb15b] hover:underline cursor-pointer inline-flex items-center gap-1 transition-colors group/artistlink"
                               title={`View ${art.creatorName}'s Artist Portfolio & all works`}
                             >
                               <span>{art.creatorName}</span>
-                              <Palette className="w-3 h-3 text-rose-500 opacity-60 group-hover/artistlink:opacity-100 transition-opacity" />
+                              <Palette className="w-3 h-3 text-[#dfb15b] opacity-70 group-hover/artistlink:opacity-100 transition-opacity" />
                             </button>
                           </p>
                         </div>
-                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                        <div className="mt-4 pt-3 border-t border-[#1d2232] flex items-center justify-between">
                           <div>
-                            <span className="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">
+                            <span className="text-[10px] text-[#717d91] block font-bold uppercase tracking-wider">
                               {selectedCategory === 'all' ? 'From' : PRODUCT_CATALOG.find((p) => p.category === selectedCategory)?.displayName || 'Format'}
                             </span>
-                            <span className="font-black text-lg text-slate-900">
+                            <span className="font-black text-lg text-[#dfb15b]">
                               {formatPrice(Number(activePrice))}
                             </span>
                           </div>
-                          <span className="text-xs font-bold text-rose-600 group-hover:bg-rose-600 group-hover:text-white bg-rose-50 px-3 py-1.5 rounded-xl transition-colors">
+                          <span className="text-xs font-bold text-[#0b0c12] bg-[#dfb15b] group-hover:bg-[#ebd085] px-3.5 py-1.5 rounded-xl transition-colors cursor-pointer shadow-sm">
                             Customize &rarr;
                           </span>
                         </div>
@@ -836,41 +918,41 @@ export default function App() {
       />
 
       {/* MX Gallery Marketplace Footer */}
-      <footer className="bg-white border-t border-slate-200 mt-16 text-slate-600 text-xs">
+      <footer className="bg-[#08090e] border-t border-[#1b2030] mt-16 text-[#7d889b] text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           {/* Trust Value Pillars */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pb-10 border-b border-slate-200">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pb-10 border-b border-[#1b2030]">
+            <div className="flex items-start gap-3.5 bg-[#0f121b] border border-[#1e2333] p-4 rounded-2xl">
+              <div className="w-10 h-10 rounded-xl bg-[#23171a] text-[#EB212B] flex items-center justify-center shrink-0 border border-[#3f1c24]">
                 <Sparkles className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="font-bold text-slate-900 text-sm">Empowering Artists</h4>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <h4 className="font-bold text-white text-sm">Empowering Artists</h4>
+                <p className="text-xs text-[#8a96aa] mt-0.5">
                   Over millions paid directly to independent creators around the world.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <div className="flex items-start gap-3.5 bg-[#0f121b] border border-[#1e2333] p-4 rounded-2xl">
+              <div className="w-10 h-10 rounded-xl bg-[#122419] text-[#4ade80] flex items-center justify-center shrink-0 border border-[#1f422b]">
                 <Shield className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="font-bold text-slate-900 text-sm">Secure & Certified</h4>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <h4 className="font-bold text-white text-sm">Secure & Certified</h4>
+                <p className="text-xs text-[#8a96aa] mt-0.5">
                   PCI-DSS certified encryption, verified purchases, and 30-day free returns.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <div className="flex items-start gap-3.5 bg-[#0f121b] border border-[#1e2333] p-4 rounded-2xl">
+              <div className="w-10 h-10 rounded-xl bg-[#171d2b] text-[#60a5fa] flex items-center justify-center shrink-0 border border-[#20314f]">
                 <Globe className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="font-bold text-slate-900 text-sm">Worldwide Delivery</h4>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <h4 className="font-bold text-white text-sm">Worldwide Delivery</h4>
+                <p className="text-xs text-[#8a96aa] mt-0.5">
                   Ethically sourced fabrics printed locally to reduce delivery transit emissions.
                 </p>
               </div>
@@ -880,44 +962,44 @@ export default function App() {
           {/* Footer Directory Links */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 py-10">
             <div>
-              <h5 className="font-bold text-slate-900 uppercase tracking-wider mb-3 text-[11px]">
+              <h5 className="font-bold text-[#dfb15b] uppercase tracking-wider mb-3 text-[11px]">
                 Explore Art
               </h5>
-              <ul className="space-y-2 text-slate-500">
+              <ul className="space-y-2 text-[#8a96aa]">
                 <li 
                   onClick={handleNavigateToMarketplace}
-                  className="hover:text-rose-600 font-bold text-rose-600 cursor-pointer flex items-center gap-1.5"
+                  className="hover:text-[#dfb15b] font-bold text-[#dfb15b] cursor-pointer flex items-center gap-1.5"
                 >
                   <Home className="w-3.5 h-3.5" />
                   <span>Shop Home (All Items)</span>
                 </li>
                 <li 
                   onClick={() => handleSelectCategory('t-shirt')}
-                  className="hover:text-slate-900 cursor-pointer"
+                  className="hover:text-white cursor-pointer transition-colors"
                 >
                   Graphic T-Shirts
                 </li>
                 <li 
                   onClick={() => handleSelectCategory('sticker')}
-                  className="hover:text-slate-900 cursor-pointer"
+                  className="hover:text-white cursor-pointer transition-colors"
                 >
                   Vinyl Stickers
                 </li>
                 <li 
                   onClick={() => handleSelectCategory('phone-case')}
-                  className="hover:text-slate-900 cursor-pointer"
+                  className="hover:text-white cursor-pointer transition-colors"
                 >
                   Phone Cases
                 </li>
                 <li 
                   onClick={() => handleSelectCategory('art-print')}
-                  className="hover:text-slate-900 cursor-pointer"
+                  className="hover:text-white cursor-pointer transition-colors"
                 >
                   Wall Art & Posters
                 </li>
                 <li 
                   onClick={() => handleSelectCategory('mug')}
-                  className="hover:text-slate-900 cursor-pointer"
+                  className="hover:text-white cursor-pointer transition-colors"
                 >
                   Ceramic Mugs
                 </li>
@@ -925,16 +1007,16 @@ export default function App() {
             </div>
 
             <div>
-              <h5 className="font-bold text-slate-900 uppercase tracking-wider mb-3 text-[11px]">
+              <h5 className="font-bold text-[#dfb15b] uppercase tracking-wider mb-3 text-[11px]">
                 For Artists & Creators
               </h5>
-              <ul className="space-y-2 text-slate-500">
+              <ul className="space-y-2 text-[#8a96aa]">
                 <li 
                   onClick={() => {
                     setActiveTab('studio');
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }} 
-                  className="hover:text-rose-600 font-semibold cursor-pointer text-slate-900"
+                  className="hover:text-[#dfb15b] font-semibold cursor-pointer text-[#d6dbe6]"
                 >
                   Sell Your Art
                 </li>
@@ -943,32 +1025,32 @@ export default function App() {
                     setActiveTab('dashboard');
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }} 
-                  className="hover:text-rose-600 font-semibold cursor-pointer text-slate-900"
+                  className="hover:text-[#dfb15b] font-semibold cursor-pointer text-[#d6dbe6]"
                 >
                   Real-time Earnings Dashboard
                 </li>
-                <li className="hover:text-slate-900 cursor-pointer">Creator Guidelines</li>
-                <li className="hover:text-slate-900 cursor-pointer">Royalty Calculator</li>
+                <li className="hover:text-white cursor-pointer transition-colors">Creator Guidelines</li>
+                <li className="hover:text-white cursor-pointer transition-colors">Royalty Calculator</li>
               </ul>
             </div>
 
             <div>
-              <h5 className="font-bold text-slate-900 uppercase tracking-wider mb-3 text-[11px]">
+              <h5 className="font-bold text-[#dfb15b] uppercase tracking-wider mb-3 text-[11px]">
                 Customer Care
               </h5>
-              <ul className="space-y-2 text-slate-500">
-                <li className="hover:text-slate-900 cursor-pointer">Delivery & Tracking</li>
-                <li className="hover:text-slate-900 cursor-pointer">Returns & Exchanges</li>
-                <li className="hover:text-slate-900 cursor-pointer">Contact Support</li>
-                <li className="hover:text-slate-900 cursor-pointer">Student Discounts</li>
+              <ul className="space-y-2 text-[#8a96aa]">
+                <li className="hover:text-white cursor-pointer transition-colors">Delivery & Tracking</li>
+                <li className="hover:text-white cursor-pointer transition-colors">Returns & Exchanges</li>
+                <li className="hover:text-white cursor-pointer transition-colors">Contact Support</li>
+                <li className="hover:text-white cursor-pointer transition-colors">Student Discounts</li>
               </ul>
             </div>
 
             <div>
-              <h5 className="font-bold text-slate-900 uppercase tracking-wider mb-3 text-[11px]">
+              <h5 className="font-bold text-[#dfb15b] uppercase tracking-wider mb-3 text-[11px]">
                 Connected Cloud
               </h5>
-              <div className="space-y-2 text-slate-500">
+              <div className="space-y-2 text-[#8a96aa]">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
                   <span>Google Cloud Firestore</span>
@@ -981,22 +1063,22 @@ export default function App() {
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
                   <span>Firebase Authentication</span>
                 </div>
-                <p className="text-[11px] text-slate-400 pt-2">
+                <p className="text-[11px] text-[#636f82] pt-2">
                   Featured design: "China girl" by artist Bamicash1
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="pt-8 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-400">
+          <div className="pt-8 border-t border-[#1b2030] flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-[#636f82]">
             <div className="flex items-center gap-3">
               <MxLogo size="sm" showText={false} />
-              <p>© 2026 MX Gallery • Independent artist marketplace & creator studio.</p>
+              <p>© 2026 mx gallery • Independent artist marketplace & creator studio.</p>
             </div>
             <div className="flex items-center gap-4">
-              <span className="hover:underline cursor-pointer">Privacy Policy</span>
-              <span className="hover:underline cursor-pointer">Terms of Service</span>
-              <span className="hover:underline cursor-pointer">Copyright & IP Policy</span>
+              <span className="hover:underline cursor-pointer hover:text-white">Privacy Policy</span>
+              <span className="hover:underline cursor-pointer hover:text-white">Terms of Service</span>
+              <span className="hover:underline cursor-pointer hover:text-white">Copyright & IP Policy</span>
             </div>
           </div>
         </div>

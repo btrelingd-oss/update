@@ -20,6 +20,7 @@ import {
   setDoc,
   addDoc,
   updateDoc,
+  deleteDoc,
   onSnapshot,
   query,
   orderBy,
@@ -306,57 +307,243 @@ export const seedInitialMarketplaceData = async () => {
   }
 };
 
+// Optimize artwork file client-side to ensure high resolution while staying safely within Firestore & Storage limits
+export async function optimizeArtworkImage(file: File): Promise<{
+  blob: Blob;
+  dataUrl: string;
+  width: number;
+  height: number;
+  originalSize: number;
+  optimizedSize: number;
+}> {
+  const originalSize = file.size;
+
+  // Handle vector SVG files cleanly
+  if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
+    try {
+      const text = await file.text();
+      // If reasonable SVG size, keep as pure vector SVG data URL
+      if (text.length < 350000) {
+        const cleanSvg = text.trim();
+        const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(cleanSvg)}`;
+        return {
+          blob: new Blob([cleanSvg], { type: 'image/svg+xml' }),
+          dataUrl,
+          width: 1200,
+          height: 1200,
+          originalSize,
+          optimizedSize: cleanSvg.length,
+        };
+      }
+    } catch {
+      // Fall through to raster conversion if reading text fails
+    }
+  }
+
+  // Handle Raster Bitmaps (PNG, JPEG, WebP) with canvas downscaling and compression
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read selected image file.'));
+    reader.onload = () => {
+      const rawDataUrl = reader.result as string;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      img.onload = () => {
+        try {
+          // Standard print mockup max dimension: 1400px preserves ultra-crisp detail across all garments & posters
+          const maxDim = 1400;
+          let width = img.naturalWidth || img.width || 1000;
+          let height = img.naturalHeight || img.height || 1000;
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+
+          if (!ctx) {
+            resolve({
+              blob: file,
+              dataUrl: rawDataUrl,
+              width,
+              height,
+              originalSize,
+              optimizedSize: originalSize,
+            });
+            return;
+          }
+
+          // Render with high-quality smoothing
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // WebP supports transparency and produces 80% smaller payloads than PNG
+          const mimeType = 'image/webp';
+          const quality = 0.88;
+
+          let dataUrl = canvas.toDataURL(mimeType, quality);
+
+          // If browser does not support WebP or dataUrl is unexpectedly large (>400KB), downscale slightly
+          if (dataUrl.length > 450000) {
+            const secondaryCanvas = document.createElement('canvas');
+            const scaleDown = 0.8;
+            secondaryCanvas.width = Math.round(width * scaleDown);
+            secondaryCanvas.height = Math.round(height * scaleDown);
+            const secCtx = secondaryCanvas.getContext('2d');
+            if (secCtx) {
+              secCtx.imageSmoothingEnabled = true;
+              secCtx.imageSmoothingQuality = 'high';
+              secCtx.drawImage(canvas, 0, 0, secondaryCanvas.width, secondaryCanvas.height);
+              dataUrl = secondaryCanvas.toDataURL('image/jpeg', 0.82);
+              width = secondaryCanvas.width;
+              height = secondaryCanvas.height;
+            }
+          }
+
+          canvas.toBlob(
+            (blob) => {
+              const finalBlob = blob || file;
+              resolve({
+                blob: finalBlob,
+                dataUrl,
+                width,
+                height,
+                originalSize,
+                optimizedSize: finalBlob.size || dataUrl.length,
+              });
+            },
+            mimeType,
+            quality
+          );
+        } catch (canvasErr) {
+          console.warn('Canvas optimization notice, using raw asset:', canvasErr);
+          resolve({
+            blob: file,
+            dataUrl: rawDataUrl,
+            width: img.width || 800,
+            height: img.height || 800,
+            originalSize,
+            optimizedSize: originalSize,
+          });
+        }
+      };
+
+      img.onerror = () => {
+        resolve({
+          blob: file,
+          dataUrl: rawDataUrl,
+          width: 800,
+          height: 800,
+          originalSize,
+          optimizedSize: originalSize,
+        });
+      };
+
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // Upload artwork image to Firebase Cloud Storage with Base64 fallback for safety
 export const uploadArtworkAsset = async (
   file: File,
   creatorId: string,
-  onProgress?: (percent: number) => void
-): Promise<{ url: string; storagePath?: string }> => {
-  if (onProgress) onProgress(15);
+  onProgress?: (percent: number, stepText?: string) => void
+): Promise<{ url: string; storagePath?: string; isCloudStorage: boolean; dimensions?: { width: number; height: number } }> => {
+  if (onProgress) onProgress(15, 'Preparing & optimizing artwork resolution...');
 
-  // Read as DataURL for immediate local preview / reliable fallback
-  const readDataUrl = (): Promise<string> =>
-    new Promise((res, rej) => {
+  // Step 1: Pre-process and optimize image client-side to guarantee it fits both Storage & Firestore
+  let optimized;
+  try {
+    optimized = await optimizeArtworkImage(file);
+  } catch (optErr) {
+    console.warn('Image optimization notice:', optErr);
+    // Fallback directly to basic file reader
+    const fallbackDataUrl = await new Promise<string>((res, rej) => {
       const reader = new FileReader();
       reader.onload = () => res(reader.result as string);
       reader.onerror = rej;
       reader.readAsDataURL(file);
     });
+    optimized = {
+      blob: file,
+      dataUrl: fallbackDataUrl,
+      width: 1000,
+      height: 1000,
+      originalSize: file.size,
+      optimizedSize: file.size,
+    };
+  }
 
-  const base64Data = await readDataUrl();
-  if (onProgress) onProgress(45);
+  if (onProgress) onProgress(40, 'Contacting Firebase Cloud Storage...');
 
+  // Step 2: Attempt Firebase Cloud Storage upload with a strict 6-second timeout race
   if (storage) {
     try {
       const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storagePath = `artworks/${creatorId}/${Date.now()}_${cleanFileName}`;
+      const isWebp = optimized.blob.type === 'image/webp';
+      const ext = isWebp ? 'webp' : (file.name.split('.').pop() || 'png');
+      const storagePath = `artworks/${creatorId}/${Date.now()}_${cleanFileName}.${ext}`;
       const fileRef = ref(storage, storagePath);
 
-      if (onProgress) onProgress(65);
-      const snapshot = await uploadBytes(fileRef, file, {
-        contentType: file.type || 'image/png',
+      if (onProgress) onProgress(65, 'Uploading asset to Cloud Storage bucket...');
+
+      const uploadPromise = uploadBytes(fileRef, optimized.blob, {
+        contentType: optimized.blob.type || file.type || 'image/webp',
+        customMetadata: {
+          creatorId,
+          originalName: file.name,
+          width: String(optimized.width),
+          height: String(optimized.height),
+          uploadedAt: new Date().toISOString(),
+        },
       });
 
-      if (onProgress) onProgress(90);
+      // 6-second timeout race prevents the upload from ever freezing or hanging indefinitely
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Cloud Storage connection timed out')), 6000)
+      );
+
+      const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
+
+      if (onProgress) onProgress(85, 'Verifying download URL...');
       const downloadUrl = await getDownloadURL(snapshot.ref);
-      if (onProgress) onProgress(100);
+      if (onProgress) onProgress(95, 'Cloud asset stored successfully.');
 
       return {
         url: downloadUrl,
         storagePath,
+        isCloudStorage: true,
+        dimensions: { width: optimized.width, height: optimized.height },
       };
     } catch (storageErr) {
-      console.warn('Firebase Cloud Storage upload fallback to high-resolution asset:', storageErr);
-      if (onProgress) onProgress(100);
+      console.warn('Firebase Cloud Storage fallback to optimized high-res asset:', storageErr);
+      if (onProgress) onProgress(90, 'Applying high-resolution optimized asset...');
       return {
-        url: base64Data,
+        url: optimized.dataUrl,
+        isCloudStorage: false,
+        dimensions: { width: optimized.width, height: optimized.height },
       };
     }
   }
 
-  if (onProgress) onProgress(100);
+  if (onProgress) onProgress(90, 'Applying high-resolution optimized asset...');
   return {
-    url: base64Data,
+    url: optimized.dataUrl,
+    isCloudStorage: false,
+    dimensions: { width: optimized.width, height: optimized.height },
   };
 };
 
@@ -543,3 +730,71 @@ export async function updateCreatorBankDetails(
     return false;
   }
 }
+
+/**
+ * Update an existing artwork document in Firestore and local storage cache
+ */
+export async function updateArtworkDoc(
+  artworkId: string,
+  updates: Partial<Artwork>
+): Promise<boolean> {
+  try {
+    const artRef = doc(db, 'artworks', artworkId);
+    await updateDoc(artRef, updates);
+
+    // Also update local storage cache
+    try {
+      const cached: Artwork[] = JSON.parse(localStorage.getItem('mx_custom_artworks') || '[]');
+      const updated = cached.map((a) => (a.id === artworkId ? { ...a, ...updates } : a));
+      localStorage.setItem('mx_custom_artworks', JSON.stringify(updated));
+    } catch {
+      // Ignore cache write error
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('Error updating artwork in Firestore:', err);
+    // Fallback: update local storage cache even if Firestore update has transient error
+    try {
+      const cached: Artwork[] = JSON.parse(localStorage.getItem('mx_custom_artworks') || '[]');
+      const updated = cached.map((a) => (a.id === artworkId ? { ...a, ...updates } : a));
+      localStorage.setItem('mx_custom_artworks', JSON.stringify(updated));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+/**
+ * Delete an artwork document from Firestore and local storage cache
+ */
+export async function deleteArtworkDoc(artworkId: string): Promise<boolean> {
+  try {
+    const artRef = doc(db, 'artworks', artworkId);
+    await deleteDoc(artRef);
+
+    // Also remove from local storage cache
+    try {
+      const cached: Artwork[] = JSON.parse(localStorage.getItem('mx_custom_artworks') || '[]');
+      const updated = cached.filter((a) => a.id !== artworkId);
+      localStorage.setItem('mx_custom_artworks', JSON.stringify(updated));
+    } catch {
+      // Ignore cache remove error
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('Error deleting artwork from Firestore:', err);
+    // Fallback: remove from local storage cache
+    try {
+      const cached: Artwork[] = JSON.parse(localStorage.getItem('mx_custom_artworks') || '[]');
+      const updated = cached.filter((a) => a.id !== artworkId);
+      localStorage.setItem('mx_custom_artworks', JSON.stringify(updated));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+

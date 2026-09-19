@@ -163,23 +163,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl animate-in zoom-in-95 my-8">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-[#0f121d] border border-[#202638] text-slate-100 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl animate-in zoom-in-95 my-8">
         {/* Modal Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+        <div className="flex items-center justify-between pb-4 border-b border-[#1e2436]">
           <div className="flex items-center gap-2">
-            <Lock className="w-5 h-5 text-emerald-600" />
+            <Lock className="w-5 h-5 text-[#dfb15b]" />
             <div>
-              <h2 className="text-lg font-black text-slate-900">Secure Order Checkout</h2>
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                <Database className="w-3 h-3 text-emerald-600" />
+              <h2 className="text-lg font-black text-white">Secure Order Checkout</h2>
+              <div className="flex items-center gap-1.5 text-[11px] text-[#8a96aa]">
+                <Database className="w-3 h-3 text-[#4ade80]" />
                 <span>Syncs to Supabase Database (Project: {SUPABASE_PROJECT_ID})</span>
               </div>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-full text-[#7e899c] hover:text-white hover:bg-[#181d2c] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -188,81 +188,81 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         {/* Order Confirmed Receipt View */}
         {confirmedOrder ? (
           <div className="py-8 text-center space-y-6 animate-in zoom-in-95">
-            <div className="w-16 h-16 rounded-3xl bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-xl">
+            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-[#dfb15b] to-[#ebd085] text-[#0b0c12] flex items-center justify-center mx-auto shadow-xl">
               <CheckCircle2 className="w-10 h-10 stroke-[2.5]" />
             </div>
 
             <div className="space-y-1">
-              <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">
+              <span className="text-xs font-bold text-[#4ade80] uppercase tracking-wider">
                 Payment Authorized & Production Queued
               </span>
-              <h3 className="text-2xl font-black text-slate-900">Thank you for your order!</h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Your order is now being individually printed. Confirmation sent to <strong>{buyerEmail}</strong>.
+              <h3 className="text-2xl font-black text-white">Thank you for your order!</h3>
+              <p className="text-xs text-[#8a96aa] max-w-md mx-auto">
+                Your order is now being individually printed. Confirmation sent to <strong className="text-white">{buyerEmail}</strong>.
               </p>
             </div>
 
             {/* Receipt Details Box */}
-            <div className="bg-slate-50 rounded-2xl p-5 text-left border border-slate-200 space-y-3 max-w-lg mx-auto text-xs">
-              <div className="flex justify-between pb-2 border-b border-slate-200">
-                <span className="text-slate-500">Order Reference:</span>
-                <strong className="text-slate-900 font-mono">{confirmedOrder.id}</strong>
+            <div className="bg-[#141824] rounded-2xl p-5 text-left border border-[#252c40] space-y-3 max-w-lg mx-auto text-xs text-[#8a96aa]">
+              <div className="flex justify-between pb-2 border-b border-[#1e2436]">
+                <span className="text-[#8a96aa]">Order Reference:</span>
+                <strong className="text-[#dfb15b] font-mono">{confirmedOrder.id}</strong>
               </div>
-              <div className="flex justify-between pb-2 border-b border-slate-200">
-                <span className="text-slate-500">Estimated Delivery:</span>
-                <strong className="text-slate-900">{confirmedOrder.delivery}</strong>
+              <div className="flex justify-between pb-2 border-b border-[#1e2436]">
+                <span className="text-[#8a96aa]">Estimated Delivery:</span>
+                <strong className="text-white">{confirmedOrder.delivery}</strong>
               </div>
-              <div className="flex justify-between pb-2 border-b border-slate-200">
-                <span className="text-slate-500">Total Paid:</span>
-                <strong className="text-slate-900 font-bold">{formatPrice(grandTotal)}</strong>
+              <div className="flex justify-between pb-2 border-b border-[#1e2436]">
+                <span className="text-[#8a96aa]">Total Paid:</span>
+                <strong className="text-[#dfb15b] font-bold text-sm">{formatPrice(grandTotal)}</strong>
               </div>
-              <div className="flex items-center justify-between text-emerald-800 bg-emerald-100/70 p-2.5 rounded-xl font-medium">
+              <div className="flex items-center justify-between text-[#ebd085] bg-[#1f1915] border border-[#3d2e1c] p-2.5 rounded-xl font-medium">
                 <span className="flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  <Sparkles className="w-3.5 h-3.5 text-[#dfb15b]" />
                   Independent Artist Support:
                 </span>
-                <strong>+{formatPrice(totalArtistMargin)} to Bamicash1</strong>
+                <strong className="text-white">+{formatPrice(totalArtistMargin)} to Bamicash1</strong>
               </div>
 
               {/* Supabase Order Database Sync Status */}
-              <div className="pt-2 border-t border-slate-200">
+              <div className="pt-2 border-t border-[#1e2436]">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 font-bold text-slate-700">
-                    <Database className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="flex items-center gap-1.5 font-bold text-white">
+                    <Database className="w-3.5 h-3.5 text-[#4ade80]" />
                     Supabase Order Database:
                   </span>
                   {supabaseStatus?.success ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#14291f] text-[#4ade80] border border-[#1e4a33]">
+                      <CheckCircle2 className="w-3 h-3 text-[#4ade80]" />
                       Synced to orders table
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
-                      <AlertCircle className="w-3 h-3 text-amber-600" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#2a2215] text-[#dfb15b] border border-[#4d3d1e]">
+                      <AlertCircle className="w-3 h-3 text-[#dfb15b]" />
                       Connected ({SUPABASE_PROJECT_ID})
                     </span>
                   )}
                 </div>
 
                 {supabaseStatus && !supabaseStatus.success && (
-                  <div className="mt-2 p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/80 text-[11px] text-amber-900 space-y-1.5">
+                  <div className="mt-2 p-2.5 rounded-xl bg-[#1d1a15] border border-[#3a301e] text-[11px] text-[#ebd085] space-y-1.5">
                     <p className="font-medium">
-                      All order fields were dispatched to Supabase project <code className="font-mono font-bold">{SUPABASE_PROJECT_ID}</code>.
+                      All order fields were dispatched to Supabase project <code className="font-mono font-bold text-white">{SUPABASE_PROJECT_ID}</code>.
                     </p>
                     {supabaseStatus.tableNotice && (
-                      <p className="text-amber-800">
+                      <p className="text-[#c8a968]">
                         {supabaseStatus.tableNotice}
                       </p>
                     )}
                     <button
                       type="button"
                       onClick={() => setShowSqlSetup(!showSqlSetup)}
-                      className="text-xs font-bold text-amber-900 underline hover:text-amber-950 inline-flex items-center gap-1 mt-1 cursor-pointer"
+                      className="text-xs font-bold text-[#dfb15b] underline hover:text-[#ebd085] inline-flex items-center gap-1 mt-1 cursor-pointer"
                     >
                       {showSqlSetup ? 'Hide Supabase Table SQL Setup' : 'View / Copy SQL to create orders table in Supabase'}
                     </button>
                     {showSqlSetup && (
-                      <div className="mt-2 p-2 bg-slate-900 text-slate-100 rounded-lg text-[10px] font-mono overflow-x-auto relative">
+                      <div className="mt-2 p-2 bg-[#0b0c12] text-slate-100 rounded-lg text-[10px] font-mono overflow-x-auto relative border border-[#212739]">
                         <button
                           type="button"
                           onClick={() => {
@@ -270,7 +270,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                             setCopiedSql(true);
                             setTimeout(() => setCopiedSql(false), 2500);
                           }}
-                          className="absolute right-2 top-2 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-white font-sans text-[10px] flex items-center gap-1"
+                          className="absolute right-2 top-2 px-2 py-1 rounded bg-[#1b2030] hover:bg-[#252c42] text-white font-sans text-[10px] flex items-center gap-1"
                         >
                           {copiedSql ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                           {copiedSql ? 'Copied' : 'Copy SQL'}
@@ -286,7 +286,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <div className="flex items-center justify-center gap-3">
               <button
                 onClick={onClose}
-                className="px-6 py-3 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold shadow-sm"
+                className="px-6 py-3 bg-[#dfb15b] hover:bg-[#ebd085] text-[#0b0c12] rounded-xl text-xs font-black shadow-md cursor-pointer transition-colors uppercase tracking-wider"
               >
                 Back to Marketplace
               </button>
@@ -297,17 +297,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           <form onSubmit={handleCheckoutSubmit} className="py-6 space-y-6">
             {/* Express Pay Methods */}
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-bold text-[#8a96aa] uppercase tracking-wider mb-2">
                 Express Checkout
               </label>
               <div className="grid grid-cols-3 gap-2.5">
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('apple_pay')}
-                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     paymentMethod === 'apple_pay'
-                      ? 'border-slate-900 bg-slate-900 text-white shadow-xs'
-                      : 'border-slate-200 text-slate-800 hover:bg-slate-50'
+                      ? 'border-[#dfb15b] bg-[#dfb15b] text-[#0b0c12] shadow-xs'
+                      : 'border-[#252c40] text-white hover:bg-[#181d2c]'
                   }`}
                 >
                   <span> Pay</span>
@@ -315,10 +315,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('google_pay')}
-                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     paymentMethod === 'google_pay'
-                      ? 'border-slate-900 bg-slate-900 text-white shadow-xs'
-                      : 'border-slate-200 text-slate-800 hover:bg-slate-50'
+                      ? 'border-[#dfb15b] bg-[#dfb15b] text-[#0b0c12] shadow-xs'
+                      : 'border-[#252c40] text-white hover:bg-[#181d2c]'
                   }`}
                 >
                   <span>G Pay</span>
@@ -326,10 +326,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('paypal')}
-                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     paymentMethod === 'paypal'
-                      ? 'border-blue-600 bg-blue-600 text-white shadow-xs'
-                      : 'border-slate-200 text-blue-700 hover:bg-slate-50'
+                      ? 'border-[#0070ba] bg-[#0070ba] text-white shadow-xs'
+                      : 'border-[#252c40] text-[#38bdf8] hover:bg-[#181d2c]'
                   }`}
                 >
                   <span>PayPal</span>
@@ -338,34 +338,34 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
 
             <div className="relative flex items-center">
-              <div className="flex-grow border-t border-slate-200" />
-              <span className="shrink-0 px-3 text-xs text-slate-400 font-semibold uppercase">
+              <div className="flex-grow border-t border-[#1e2436]" />
+              <span className="shrink-0 px-3 text-xs text-[#7e899c] font-semibold uppercase">
                 Or Pay With Credit Card
               </span>
-              <div className="flex-grow border-t border-slate-200" />
+              <div className="flex-grow border-t border-[#1e2436]" />
             </div>
 
             {/* Credit Card Input Group */}
-            <div className="space-y-3 bg-slate-50/70 p-4 rounded-2xl border border-slate-200">
+            <div className="space-y-3 bg-[#141824] p-4 rounded-2xl border border-[#252c40]">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+                <label className="block text-xs font-bold text-[#8a96aa] uppercase tracking-wide mb-1">
                   Card Number
                 </label>
                 <div className="relative">
-                  <CreditCard className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <CreditCard className="w-4 h-4 text-[#7e899c] absolute left-3 top-3" />
                   <input
                     type="text"
                     required
                     value={cardNumber}
                     onChange={(e) => setCardNumber(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:border-rose-500 font-mono"
+                    className="w-full pl-9 pr-3 py-2 bg-[#0c0e17] border border-[#252c40] rounded-xl text-xs text-white focus:outline-hidden focus:border-[#dfb15b] font-mono"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+                  <label className="block text-xs font-bold text-[#8a96aa] uppercase tracking-wide mb-1">
                     Expiration Date
                   </label>
                   <input
@@ -374,11 +374,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     value={cardExpiry}
                     onChange={(e) => setCardExpiry(e.target.value)}
                     placeholder="MM/YY"
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:border-rose-500 font-mono"
+                    className="w-full px-3 py-2 bg-[#0c0e17] border border-[#252c40] rounded-xl text-xs text-white focus:outline-hidden focus:border-[#dfb15b] font-mono placeholder:text-[#556175]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+                  <label className="block text-xs font-bold text-[#8a96aa] uppercase tracking-wide mb-1">
                     Security Code (CVC)
                   </label>
                   <input
@@ -387,7 +387,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     value={cardCvc}
                     onChange={(e) => setCardCvc(e.target.value)}
                     placeholder="CVC"
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:border-rose-500 font-mono"
+                    className="w-full px-3 py-2 bg-[#0c0e17] border border-[#252c40] rounded-xl text-xs text-white focus:outline-hidden focus:border-[#dfb15b] font-mono placeholder:text-[#556175]"
                   />
                 </div>
               </div>
@@ -395,113 +395,113 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
             {/* Shipping Address Inputs */}
             <div className="space-y-3">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Truck className="w-3.5 h-3.5 text-slate-600" />
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <Truck className="w-3.5 h-3.5 text-[#dfb15b]" />
                 <span>Shipping Address</span>
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">First & Last Name</label>
+                  <label className="block text-xs font-medium text-[#8a96aa] mb-1">First & Last Name</label>
                   <input
                     type="text"
                     required
                     value={buyerName}
                     onChange={(e) => setBuyerName(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:border-rose-500"
+                    className="w-full px-3 py-2 bg-[#141824] border border-[#252c40] rounded-xl text-xs text-white focus:outline-hidden focus:border-[#dfb15b]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Phone Number</label>
+                  <label className="block text-xs font-medium text-[#8a96aa] mb-1">Phone Number</label>
                   <input
                     type="tel"
                     required
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     placeholder="+1 (555) 000-0000"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:border-rose-500"
+                    className="w-full px-3 py-2 bg-[#141824] border border-[#252c40] rounded-xl text-xs text-white focus:outline-hidden focus:border-[#dfb15b] placeholder:text-[#556175]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Email</label>
+                  <label className="block text-xs font-medium text-[#8a96aa] mb-1">Email</label>
                   <input
                     type="email"
                     required
                     value={buyerEmail}
                     onChange={(e) => setBuyerEmail(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:border-rose-500"
+                    className="w-full px-3 py-2 bg-[#141824] border border-[#252c40] rounded-xl text-xs text-white focus:outline-hidden focus:border-[#dfb15b]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Street Address</label>
+                <label className="block text-xs font-medium text-[#8a96aa] mb-1">Street Address</label>
                 <input
                   type="text"
                   required
                   value={street}
                   onChange={(e) => setStreet(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:border-rose-500"
+                  className="w-full px-3 py-2 bg-[#141824] border border-[#252c40] rounded-xl text-xs text-white focus:outline-hidden focus:border-[#dfb15b]"
                 />
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">City</label>
+                  <label className="block text-xs font-medium text-[#8a96aa] mb-1">City</label>
                   <input
                     type="text"
                     required
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:border-rose-500"
+                    className="w-full px-3 py-2 bg-[#141824] border border-[#252c40] rounded-xl text-xs text-white focus:outline-hidden focus:border-[#dfb15b]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">State / Province</label>
+                  <label className="block text-xs font-medium text-[#8a96aa] mb-1">State / Province</label>
                   <input
                     type="text"
                     required
                     value={state}
                     onChange={(e) => setState(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:border-rose-500"
+                    className="w-full px-3 py-2 bg-[#141824] border border-[#252c40] rounded-xl text-xs text-white focus:outline-hidden focus:border-[#dfb15b]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Postal Code</label>
+                  <label className="block text-xs font-medium text-[#8a96aa] mb-1">Postal Code</label>
                   <input
                     type="text"
                     required
                     value={postalCode}
                     onChange={(e) => setPostalCode(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:border-rose-500"
+                    className="w-full px-3 py-2 bg-[#141824] border border-[#252c40] rounded-xl text-xs text-white focus:outline-hidden focus:border-[#dfb15b]"
                   />
                 </div>
               </div>
             </div>
 
             {/* Price Breakdown */}
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs space-y-1.5">
-              <div className="flex justify-between text-slate-600">
+            <div className="bg-[#0c0e17] p-4 rounded-2xl border border-[#1e2436] text-xs space-y-1.5 text-[#8a96aa]">
+              <div className="flex justify-between">
                 <span>Items Subtotal ({cart.reduce((a, b) => a + b.quantity, 0)} items)</span>
-                <span>{formatPrice(subtotal)}</span>
+                <span className="font-semibold text-white">{formatPrice(subtotal)}</span>
               </div>
               {appliedDiscount > 0 && (
-                <div className="flex justify-between text-emerald-700 font-semibold">
+                <div className="flex justify-between text-[#4ade80] font-semibold">
                   <span>Discount</span>
                   <span>-{formatPrice(appliedDiscount)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-slate-600">
+              <div className="flex justify-between">
                 <span>Shipping</span>
-                <span>{shipping === 0 ? 'FREE' : formatPrice(shipping)}</span>
+                <span>{shipping === 0 ? <strong className="text-[#4ade80]">FREE</strong> : formatPrice(shipping)}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
+              <div className="flex justify-between">
                 <span>Estimated Sales Tax</span>
-                <span>{formatPrice(tax)}</span>
+                <span className="text-white">{formatPrice(tax)}</span>
               </div>
-              <div className="flex justify-between text-sm font-black text-slate-900 pt-2 border-t border-slate-200">
+              <div className="flex justify-between text-sm font-black text-white pt-2 border-t border-[#1e2436]">
                 <span>Total Amount Due</span>
-                <span>{formatPrice(grandTotal)}</span>
+                <span className="text-[#dfb15b] text-base">{formatPrice(grandTotal)}</span>
               </div>
             </div>
 
@@ -510,11 +510,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               id="confirm-payment-btn"
               type="submit"
               disabled={isProcessing}
-              className="w-full py-4 px-6 rounded-2xl bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+              className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#dfb15b] to-[#ebd085] hover:from-[#e5b963] hover:to-[#f3dc98] disabled:opacity-50 text-[#0b0c12] font-black text-sm shadow-lg hover:shadow-[0_4px_20px_rgba(223,177,91,0.25)] transition-all flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider"
             >
               {isProcessing ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-[#0b0c12] border-t-transparent rounded-full animate-spin" />
                   <span>Processing Secure Payment...</span>
                 </>
               ) : (
